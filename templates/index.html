@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trip Planner GPT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Add Litepicker and its dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/litepicker.js"></script>
+    <style>
+        .litepicker {
+            font-size: 0.9rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border-radius: 0.5rem;
+            background-color: white;
+        }
+        .litepicker .container__months {
+            padding: 0.5rem;
+        }
+        .litepicker .container__days .day-item.is-start-date,
+        .litepicker .container__days .day-item.is-end-date {
+            background-color: #2563eb;
+            color: white;
+        }
+        .litepicker .container__days .day-item.is-in-range {
+            background-color: #dbeafe;
+            color: #1e40af;
+        }
+    </style>
+    <script>
+        async function planTrip(event) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+            
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('result').classList.add('hidden');
+            document.getElementById('error').classList.add('hidden');
+            
+            try {
+                // Set a timeout for the fetch request
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+                
+                const response = await fetch('/plan_trip', {
+                    method: 'POST',
+                    body: formData,
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Server error');
+                }
+                
+                const data = await response.json();
+                
+                document.getElementById('plan-content').innerHTML = data.plan.replace(/\n/g, '<br>');
+                document.getElementById('result').classList.remove('hidden');
+            } catch (error) {
+                console.error('Error:', error);
+                
+                let errorMessage = 'An error occurred while planning your trip.';
+                
+                if (error.name === 'AbortError') {
+                    errorMessage = 'Request timed out. The server took too long to respond.';
+                } else if (error.message) {
+                    errorMessage = error.message;
+                }
+                
+                document.getElementById('error-message').textContent = errorMessage;
+                document.getElementById('error').classList.remove('hidden');
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize the date picker
+            const picker = new Litepicker({ 
+                element: document.getElementById('date-range'),
+                singleMode: false,
+                numberOfMonths: 2,
+                numberOfColumns: 2,
+                startDate: new Date(),
+                endDate: new Date(new Date().setDate(new Date().getDate() + 7)),
+                format: 'MMM D, YYYY',
+                minDate: new Date(),
+                autoApply: true,
+                showTooltip: true
+            });
+            
+            // Add event listener for date selection
+            picker.on('selected', (date1, date2) => {
+                // Update the hidden input with formatted date range for backend
+                const startDate = date1.format('MMM D, YYYY');
+                const endDate = date2.format('MMM D, YYYY');
+                document.getElementById('dates').value = `${startDate} - ${endDate}`;
+            });
+            
+            // Set initial value for the hidden input
+            const today = new Date();
+            const nextWeek = new Date(today);
+            nextWeek.setDate(today.getDate() + 7);
+            
+            const formatDate = (date) => {
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+            };
+            
+            document.getElementById('dates').value = `${formatDate(today)} - ${formatDate(nextWeek)}`;
+        });
+    </script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-4xl font-bold text-center mb-8 text-blue-600">Trip Planner GPT</h1>
+        
+        <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-6">
+            <form onsubmit="planTrip(event)" class="space-y-4">
+                <div>
+                    <label for="destination" class="block text-sm font-medium text-gray-700">Destination</label>
+                    <input type="text" id="destination" name="destination" required
+                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                </div>
+                
+                <div>
+                    <label for="date-range" class="block text-sm font-medium text-gray-700">Travel Dates</label>
+                    <input type="text" id="date-range" placeholder="Select date range" readonly
+                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 cursor-pointer">
+                    <!-- Hidden input to store the formatted date range for backend -->
+                    <input type="hidden" id="dates" name="dates" required>
+                </div>
+                
+                <div>
+                    <label for="budget" class="block text-sm font-medium text-gray-700">Budget</label>
+                    <input type="text" id="budget" name="budget" required placeholder="e.g., $3000"
+                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                </div>
+                
+                <div>
+                    <label for="preferences" class="block text-sm font-medium text-gray-700">Preferences</label>
+                    <textarea id="preferences" name="preferences" rows="3" placeholder="e.g., interested in food, culture, outdoor activities"
+                              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                </div>
+                
+                <button type="submit"
+                        class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                    Plan My Trip
+                </button>
+            </form>
+        </div>
+        
+        <div id="loading" class="hidden mt-8 text-center">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
+            <p class="mt-2 text-gray-600">Planning your perfect trip... (This may take up to a minute)</p>
+        </div>
+        
+        <div id="error" class="hidden mt-8 max-w-2xl mx-auto bg-red-50 border border-red-200 rounded-lg shadow-lg p-6">
+            <h2 class="text-2xl font-semibold mb-4 text-red-800">Error</h2>
+            <p id="error-message" class="text-red-700"></p>
+            <p class="mt-4 text-gray-700">Please check your OpenAI API key or try again later.</p>
+        </div>
+        
+        <div id="result" class="hidden mt-8 max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800">Your Trip Plan</h2>
+            <div id="plan-content" class="prose"></div>
+        </div>
+    </div>
+</body>
+</html> 
